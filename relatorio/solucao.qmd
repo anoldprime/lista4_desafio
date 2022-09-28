@@ -59,6 +59,8 @@ Para responder os itens a seguir, use os conhecimentos adquiridos no curso para 
 
 **Solução:**
 
+**Observação:** o conjunto de dados fornecido foi modificado para incluir uma coluna com os grupos das seleções e também foram adicionadas as três seleções que faltavam --- Austrália, Costa Rica e País de Gales --- e as respetivas estatísticas nos últimos 10 jogos.
+
 ```{r}
 p_load(tidyverse, readxl)
 selecoes <- read_excel("../Estatisticas_times.xlsx")
@@ -84,15 +86,79 @@ Assim, a probabilidade estimada do placar 5x0 na estreia do Brasil na Copa, $P(X
 dpois(5, l.BRA.SER)*dpois(0, l.SER.BRA)
 ```
 
-Ou seja, esse placar é esperado ocorrer em aproximadamente 4342 das um milhão simulações.
+Ou seja, esse placar é esperado ocorrer em aproximadamente 4343 das um milhão simulações. De fato, esse resultado é verificado através da simulação de Monte Carlo abaixo.
+
+```{r}
+n <- 10^6
+GOLS_BRA <- rpois(n, l.BRA.SER)
+GOLS_SER <- rpois(n, l.SER.BRA)
+
+# Total de placares 5x0
+sum(GOLS_BRA == 5 & GOLS_SER == 0)
+```
+
+O site *bettingodds.com* indica que a probabilidade de o Brasil vencer a Sérvia por 5 a 0 na fase de grupos é de 2%, cinco vezes maior que o previsto por nosso modelo.
 
 **b)** Qual é o jogo mais decisivo do Brasil na fase de grupos? Isso é, aquele que, se vencido, leva à maior probabilidade de classificação da seleção para a segunda fase. Responda simulando os resultados do grupo do Brasil.
 
 **Observação**: Esse tipo de análise é usado para definir questões comercialmente estratégicas como o calendário de competições, preço de comercialização do produto, entre outras.
 
+**Solução:**
+
+Na fase de grupos, as quatro seleções de cada grupo jogam entre si, totalizando seis jogos. As duas seleções com a melhor pontuação são selecionadas para a próxima fase, sendo que os jogos vencidos e empatados valem 3 pontos e 1 ponto, respectivamente. Em caso de pontuações empatadas, o saldo de gols (diferença entre marcados e sofridos) é utilizado como critério de desempate.
+
+```{r}
+p_load(tidyverse, combinat)
+
+# Lista nomeada por país das linhas da tabela de seleções
+lista_selecoes <- map(1:32, ~selecoes[.x,])
+names(lista_selecoes) = selecoes$PAIS
+
+obter_pares_selecoes <- function(df_selecoes){
+  # Pares de seleções
+  pares_selecoes <- combn(df_selecoes$PAIS, 2)
+
+  selecoes_A <- bind_rows(lista_selecoes[pares_selecoes[1,]])
+  colnames(selecoes_A) <- str_c(colnames(selecoes_A), "_A")
+
+  selecoes_B <- bind_rows(lista_selecoes[pares_selecoes[2,]])
+  colnames(selecoes_B) <- str_c(colnames(selecoes_B), "_B")
+
+  # Pares de seleções e respectivas estatísticas
+  bind_cols(selecoes_A, selecoes_B) %>%
+    select(PAIS_A, PAIS_B, everything())
+}
+
+fase_grupos <- selecoes %>%
+  obter_pares_selecoes()
+
+# Cálculo dos dois parâmetros lambda para cada par de seleções
+fase_grupos <- fase_grupos %>%
+  mutate(
+    LAMBDA_AB = (GOLS_FEITOS_A/JOGOS_A + GOLS_SOFRIDOS_B/JOGOS_B)/2,
+    LAMBDA_BA = (GOLS_FEITOS_B/JOGOS_B + GOLS_SOFRIDOS_A/JOGOS_A)/2)
+
+# %>%
+# Filtra os jogos entre o grupo G
+#  filter(GRUPO_A == "G", GRUPO_B == "G")
+```
+
+```{r}
+# Simulação de uma única rodada de jogos no grupo G
+fase_grupos %>%
+  filter(GRUPO_A == "G", GRUPO_B == "G") %>%
+  mutate(GOLS_A = rpois(n(), LAMBDA_AB),
+         GOLS_B = rpois(n(), LAMBDA_BA)) %>%
+  select(GRUPO = GRUPO_A, everything(), -GRUPO_B)
+```
+
 **c)** Qual é a probabilidade do Brasil ser campeão, em uma final contra a Argentina, tendo se classificado em primeiro do grupo? Para responder ao item, gere 100 milhões de amostra de Monte Carlo usando um cluster na nuvem!
 
 **Atenção**: Nas fases eliminatórias, em caso de empate, sorteie o classificado considerando probabilidade de 50% para cada time (como dizem - equivocadamente -, *penalty* é loteria).
+
+**Solução:**
+
+abc
 
 ## Considerações finais
 
