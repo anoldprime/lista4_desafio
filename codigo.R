@@ -119,21 +119,24 @@ for(i in 1:100){
   brasil_selecionado <- brasil_foi_selecionado(dfs$paises_selecionados)
   names(brasil_selecionado) <- "BRASIL_SELECIONADO"
   
+  if(!brasil_selecionado)
+    print(dfs$pontuacoes %>% filter(GRUPO_A == "G"))
+  
   resultados <- resultados %>%
     add_row(!!!append(brasil_venceu_paises, brasil_selecionado))
 }
 
 # 300 ms por simulação
-microbenchmark::microbenchmark(simular_fase_grupos(fase_grupos), times=25)
+# microbenchmark::microbenchmark(simular_fase_grupos(fase_grupos), times=25)
 
+# Porcentagem de vezes que o Brasil foi selecionado para a próxima fase
+# quando venceu um determinado jogo (contra Camarões, Sérvia e Suíça)
 resultados %>%
   group_by(BRASIL_VENCEU_CAMEROON) %>%
   summarise(BRASIL_SELECIONADO = mean(BRASIL_SELECIONADO))
-
 resultados %>%
   group_by(BRASIL_VENCEU_SERBIA) %>%
   summarise(BRASIL_SELECIONADO = mean(BRASIL_SELECIONADO))
-
 resultados %>%
   group_by(BRASIL_VENCEU_SWITZERLAND) %>%
   summarise(BRASIL_SELECIONADO = mean(BRASIL_SELECIONADO))
