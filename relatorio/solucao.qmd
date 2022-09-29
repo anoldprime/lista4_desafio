@@ -149,10 +149,79 @@ fase_grupos %>%
   filter(GRUPO_A == "G", GRUPO_B == "G") %>%
   mutate(GOLS_A = rpois(n(), LAMBDA_AB),
          GOLS_B = rpois(n(), LAMBDA_BA)) %>%
+  group_by(PAIS_A) %>%
+  mutate(SIMU_GOLS_FEITOS_A1 = sum(GOLS_A),
+         SIMU_GOLS_SOFRIDOS_A1 = sum(GOLS_B)) %>%
+  group_by(PAIS_B) %>%
+  mutate(SIMU_GOLS_FEITOS_B1 = sum(GOLS_B),
+         SIMU_GOLS_SOFRIDOS_B1 = sum(GOLS_A)) %>%
+  ungroup() %>%
   select(GRUPO = GRUPO_A, everything(), -GRUPO_B)
 ```
 
-**c)** Qual é a probabilidade do Brasil ser campeão, em uma final contra a Argentina, tendo se classificado em primeiro do grupo? Para responder ao item, gere 100 milhões de amostra de Monte Carlo usando um cluster na nuvem!
+```{r}
+fase_grupos %>%
+  filter(GRUPO_A == GRUPO_B) %>%
+  mutate(GOLS_A = rpois(n(), LAMBDA_AB),
+         GOLS_B = rpois(n(), LAMBDA_BA)) %>% 
+  group_by(GRUPO_A) %>%
+  group_modify(~{
+    .x %>%
+      select(PAIS_A, PAIS_B, GOLS_A, GOLS_B) %>%
+      pivot_longer(all_of(c("PAIS_A", "PAIS_B")),
+                   names_to="tipo_gol",
+                   values_to="PAIS") %>%
+      group_by(PAIS) %>%
+      summarise(
+        GOLS_FEITOS=sum(if_else(tipo_gol == "PAIS_A", GOLS_A, GOLS_B)),
+        GOLS_SOFRIDOS=sum(if_else(tipo_gol == "PAIS_A", GOLS_B, GOLS_A)))})
+                   
+```
+
+```{r}
+  pais_i <- "Serbia"
+  
+  # Placares simulados e pontuações de cada equipe
+  df_resultado <- fase_grupos %>%
+    filter(GRUPO_A == "G", GRUPO_B == "G") %>%
+    mutate(GOLS_A = rpois(n(), LAMBDA_AB),
+           GOLS_B = rpois(n(), LAMBDA_BA)) %>%
+    mutate(PONTUACAO_A = case_when(GOLS_A > GOLS_B ~ 3,
+                                   GOLS_A == GOLS_B ~ 1,
+                                   TRUE ~ 0),
+           PONTUACAO_B = case_when(GOLS_B > GOLS_A ~ 3,
+                                   GOLS_B == GOLS_A ~ 1,
+                                   TRUE ~ 0))
+  
+  brasil_venceu_pais <- (df_resultado %>%
+    filter(PAIS_A == "Brazil",
+           PAIS_B == pais_i,
+           GOLS_A > GOLS_B) %>%
+    nrow() > 0)
+  
+  # Países selecioandos para a próxima fase
+  df_selecionados <- df_resultado %>%
+    select(PAIS_A, PAIS_B, GOLS_A, GOLS_B, PONTUACAO_A, PONTUACAO_B) %>%
+    pivot_longer(all_of(c("PAIS_A", "PAIS_B")),
+                 names_to="tipo_gol",
+                 values_to="PAIS") %>%
+    group_by(PAIS) %>%
+    summarise(
+      GOLS_FEITOS=sum(if_else(tipo_gol == "PAIS_A", GOLS_A, GOLS_B)),
+      GOLS_SOFRIDOS=sum(if_else(tipo_gol == "PAIS_A", GOLS_B, GOLS_A)),
+      PONTUACAO=sum(if_else(tipo_gol == "PAIS_A", PONTUACAO_A, PONTUACAO_B)),
+      SALDO_GOLS=GOLS_FEITOS - GOLS_SOFRIDOS) %>%
+  arrange(desc(PONTUACAO), desc(SALDO_GOLS)) %>%
+  slice(1:2)
+
+  brasil_foi_selecionado <- ("Brazil" %in% pull(df_selecionados, PAIS))
+  
+  # print(df_resultado)
+  # print(df_selecionados)
+  # cat(pais_i, brasil_venceu_pais, brasil_foi_selecionado, "\n", sep="\t")
+```
+
+**c)** Qual é a probabilidade do Brasil ser campeão, em uma final contra a Argentina, tendo se classificado em primeiro do grupo? Para responder ao item, gere 100 milhões de amostras de Monte Carlo usando um cluster na nuvem!
 
 **Atenção**: Nas fases eliminatórias, em caso de empate, sorteie o classificado considerando probabilidade de 50% para cada time (como dizem - equivocadamente -, *penalty* é loteria).
 
