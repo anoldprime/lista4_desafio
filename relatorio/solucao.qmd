@@ -105,7 +105,9 @@ O site *bettingodds.com* indica que a probabilidade de o Brasil vencer a Sérvia
 
 **Solução:**
 
-Na fase de grupos, as quatro seleções de cada grupo jogam entre si, totalizando seis jogos. As duas seleções com a melhor pontuação são selecionadas para a próxima fase, sendo que os jogos vencidos e empatados valem 3 pontos e 1 ponto, respectivamente. Em caso de pontuações empatadas, o saldo de gols (diferença entre marcados e sofridos) é utilizado como critério de desempate.
+Na fase de grupos, as quatro seleções de cada grupo jogam entre si, totalizando seis jogos cada, e as duas seleções de melhor pontuação são selecionadas para a próxima fase, sendo que os jogos vencidos e empatados valem 3 pontos e 1 ponto, respectivamente. Em caso de empate de pontuações, vence o que possui o maior saldo de gols (diferença entre marcados e sofridos).
+
+Antes de tudo precisamos obter os jogos da fase de grupos. Então, para cada par de seleções, calculamos os lambdas para a distribuição do placar.
 
 ```{r}
 p_load(tidyverse, combinat)
@@ -117,90 +119,70 @@ names(lista_selecoes) = selecoes$PAIS
 obter_pares_selecoes <- function(df_selecoes){
   # Pares de seleções
   pares_selecoes <- combn(df_selecoes$PAIS, 2)
-
+  
+  # Estatísticas da seleção A
   selecoes_A <- bind_rows(lista_selecoes[pares_selecoes[1,]])
   colnames(selecoes_A) <- str_c(colnames(selecoes_A), "_A")
-
+  
   selecoes_B <- bind_rows(lista_selecoes[pares_selecoes[2,]])
   colnames(selecoes_B) <- str_c(colnames(selecoes_B), "_B")
-
-  # Pares de seleções e respectivas estatísticas
+  
+  # Estatísticas conjuntas (gols feitos, sofridos etc)
   bind_cols(selecoes_A, selecoes_B) %>%
     select(PAIS_A, PAIS_B, everything())
 }
 
+# Filtra apenas os jogos entre equipes do mesmo grupo
+filtrar_dentre_grupos <- function(x){
+  x %>% filter(GRUPO_A == GRUPO_B)
+}
+
+calcular_lambdas <- function(x) {
+  x %>%
+    mutate(
+      LAMBDA_AB = (GOLS_FEITOS_A/JOGOS_A + GOLS_SOFRIDOS_B/JOGOS_B)/2,
+      LAMBDA_BA = (GOLS_FEITOS_B/JOGOS_B + GOLS_SOFRIDOS_A/JOGOS_A)/2) %>%
+    select(PAIS_A, PAIS_B, GRUPO_A, GRUPO_B, LAMBDA_AB, LAMBDA_BA)
+}
+```
+
+Os primeiros dez dos 48 jogos, junto aos lambdas, são mostrados a seguir.
+
+```{r}
 fase_grupos <- selecoes %>%
-  obter_pares_selecoes()
+  obter_pares_selecoes() %>%
+  filtrar_dentre_grupos() %>%
+  calcular_lambdas()
 
-# Cálculo dos dois parâmetros lambda para cada par de seleções
-fase_grupos <- fase_grupos %>%
-  mutate(
-    LAMBDA_AB = (GOLS_FEITOS_A/JOGOS_A + GOLS_SOFRIDOS_B/JOGOS_B)/2,
-    LAMBDA_BA = (GOLS_FEITOS_B/JOGOS_B + GOLS_SOFRIDOS_A/JOGOS_A)/2)
-
-# %>%
-# Filtra os jogos entre o grupo G
-#  filter(GRUPO_A == "G", GRUPO_B == "G")
+print(fase_grupos, n=10)
 ```
 
-```{r}
-# Simulação de uma única rodada de jogos no grupo G
-fase_grupos %>%
-  filter(GRUPO_A == "G", GRUPO_B == "G") %>%
-  mutate(GOLS_A = rpois(n(), LAMBDA_AB),
-         GOLS_B = rpois(n(), LAMBDA_BA)) %>%
-  group_by(PAIS_A) %>%
-  mutate(SIMU_GOLS_FEITOS_A1 = sum(GOLS_A),
-         SIMU_GOLS_SOFRIDOS_A1 = sum(GOLS_B)) %>%
-  group_by(PAIS_B) %>%
-  mutate(SIMU_GOLS_FEITOS_B1 = sum(GOLS_B),
-         SIMU_GOLS_SOFRIDOS_B1 = sum(GOLS_A)) %>%
-  ungroup() %>%
-  select(GRUPO = GRUPO_A, everything(), -GRUPO_B)
-```
+Com os jogos definidos e os lambdas calculados, podemos simular os placares; abaixo temos os primeiros dez.
 
 ```{r}
-fase_grupos %>%
-  filter(GRUPO_A == GRUPO_B) %>%
-  mutate(GOLS_A = rpois(n(), LAMBDA_AB),
-         GOLS_B = rpois(n(), LAMBDA_BA)) %>% 
-  group_by(GRUPO_A) %>%
-  group_modify(~{
-    .x %>%
-      select(PAIS_A, PAIS_B, GOLS_A, GOLS_B) %>%
-      pivot_longer(all_of(c("PAIS_A", "PAIS_B")),
-                   names_to="tipo_gol",
-                   values_to="PAIS") %>%
-      group_by(PAIS) %>%
-      summarise(
-        GOLS_FEITOS=sum(if_else(tipo_gol == "PAIS_A", GOLS_A, GOLS_B)),
-        GOLS_SOFRIDOS=sum(if_else(tipo_gol == "PAIS_A", GOLS_B, GOLS_A)))})
-                   
-```
-
-```{r}
-  pais_i <- "Serbia"
-  
-  # Placares simulados e pontuações de cada equipe
-  df_resultado <- fase_grupos %>%
-    filter(GRUPO_A == "G", GRUPO_B == "G") %>%
+simular_placares <- function(x, seed=NULL){
+  set.seed(seed)
+  x %>%
     mutate(GOLS_A = rpois(n(), LAMBDA_AB),
            GOLS_B = rpois(n(), LAMBDA_BA)) %>%
+    select(-LAMBDA_AB, -LAMBDA_BA)
+}
+
+(placares <- simular_placares(fase_grupos)) %>%
+  print(n=10)
+```
+
+Agora, as pontuações de cada time nos três jogos que jogaram contra as demais seleções de seus grupos.
+
+```{r}
+calcular_pontuacoes <- function(x) {
+  x %>%
     mutate(PONTUACAO_A = case_when(GOLS_A > GOLS_B ~ 3,
                                    GOLS_A == GOLS_B ~ 1,
                                    TRUE ~ 0),
            PONTUACAO_B = case_when(GOLS_B > GOLS_A ~ 3,
                                    GOLS_B == GOLS_A ~ 1,
-                                   TRUE ~ 0))
-  
-  brasil_venceu_pais <- (df_resultado %>%
-    filter(PAIS_A == "Brazil",
-           PAIS_B == pais_i,
-           GOLS_A > GOLS_B) %>%
-    nrow() > 0)
-  
-  # Países selecioandos para a próxima fase
-  df_selecionados <- df_resultado %>%
+                                   TRUE ~ 0)) %>%
     select(PAIS_A, PAIS_B, GOLS_A, GOLS_B, PONTUACAO_A, PONTUACAO_B) %>%
     pivot_longer(all_of(c("PAIS_A", "PAIS_B")),
                  names_to="tipo_gol",
@@ -209,25 +191,123 @@ fase_grupos %>%
     summarise(
       GOLS_FEITOS=sum(if_else(tipo_gol == "PAIS_A", GOLS_A, GOLS_B)),
       GOLS_SOFRIDOS=sum(if_else(tipo_gol == "PAIS_A", GOLS_B, GOLS_A)),
-      PONTUACAO=sum(if_else(tipo_gol == "PAIS_A", PONTUACAO_A, PONTUACAO_B)),
-      SALDO_GOLS=GOLS_FEITOS - GOLS_SOFRIDOS) %>%
-  arrange(desc(PONTUACAO), desc(SALDO_GOLS)) %>%
-  slice(1:2)
+      PONTUACAO=sum(if_else(tipo_gol == "PAIS_A",
+                            PONTUACAO_A,
+                            PONTUACAO_B)),
+      SALDO_GOLS=GOLS_FEITOS - GOLS_SOFRIDOS)
+}
 
-  brasil_foi_selecionado <- ("Brazil" %in% pull(df_selecionados, PAIS))
-  
-  # print(df_resultado)
-  # print(df_selecionados)
-  # cat(pais_i, brasil_venceu_pais, brasil_foi_selecionado, "\n", sep="\t")
+pontuacoes <- placares %>%
+  group_by(GRUPO=GRUPO_A) %>%
+  group_modify(~calcular_pontuacoes(.x)) %>%
+  arrange(PAIS)
+
+print(pontuacoes, n=10)
 ```
+
+Enfim, selecionamos as duas melhores equipes de cada grupo com base na pontuação e no saldo de gols, o que faz restar para a próxima fase apenas 16 das 32 seleções iniciais.
+
+```{r}
+selecionar_selecoes <- function(x) {
+  x %>%
+    arrange(desc(PONTUACAO), desc(SALDO_GOLS)) %>%
+    slice(1:2)
+}
+
+paises_selecionados <- pontuacoes %>%
+  group_by(GRUPO) %>%
+  selecionar_selecoes()
+
+print(paises_selecionados, n=10)
+```
+
+Encapsulando todas essas operações na função `simular_fase_grupos`...
+
+```{r}
+simular_fase_grupos <- function(x){
+  placares <- x %>%
+    group_by(GRUPO_A) %>%
+    group_modify(~simular_placares(.x))
+  
+  pontuacoes <- placares %>%
+    group_by(GRUPO_A) %>%
+    group_modify(~calcular_pontuacoes(.x))
+  
+  paises_selecionados <- pontuacoes %>%
+    group_by(GRUPO_A) %>%
+    group_modify(~selecionar_selecoes(.x))
+
+  return(list(placares=placares,
+              pontuacoes=pontuacoes,
+              paises_selecionados=paises_selecionados))
+}
+
+# Determina se o Brasil venceu um determinado país no torneio inicial
+brasil_venceu_pais <- function(df_placares, pais){
+  df_placares %>%
+    filter((PAIS_A == "Brazil" & PAIS_B == pais & GOLS_A > GOLS_B) | 
+           (PAIS_B == "Brazil" & PAIS_A == pais & GOLS_B > GOLS_A)) %>%
+    nrow() > 0
+}
+
+# Determina se o Brasil foi selecionado para a próxima fase
+brasil_foi_selecionado <- function(df_selecionados){
+  "Brazil" %in% pull(df_selecionados, PAIS)
+}
+```
+
+Agora podemos simular a fase de grupos várias vezes e ver em quais delas o Brasil venceu determinados países e se foi selecionado ou não.
+
+```{r}
+resultados <- tibble(BRASIL_VENCEU_CAMEROON=logical(),
+                     BRASIL_VENCEU_SERBIA=logical(),
+                     BRASIL_VENCEU_SWITZERLAND=logical(),
+                     BRASIL_SELECIONADO=logical())
+
+for(i in 1:1000){
+  dfs <- simular_fase_grupos(fase_grupos)
+  
+  paises <- c("Cameroon", "Serbia", "Switzerland")
+  brasil_venceu_paises <- map(paises, ~brasil_venceu_pais(dfs$placares, .x))
+  names(brasil_venceu_paises) <- str_c(
+    "BRASIL_VENCEU_", str_to_upper(str_replace_all(paises, " ", "_")))
+  
+  brasil_selecionado <- brasil_foi_selecionado(dfs$paises_selecionados)
+  names(brasil_selecionado) <- "BRASIL_SELECIONADO"
+  
+  resultados <- resultados %>%
+    add_row(!!!append(brasil_venceu_paises, brasil_selecionado))
+}
+
+# Fração de vezes que o Brasil foi selecionado para a próxima fase
+# quando venceu (ou não) um determinado jogo
+resultados %>%
+  group_by(BRASIL_VENCEU_CAMEROON) %>%
+  summarise(BRASIL_SELECIONADO = mean(BRASIL_SELECIONADO))
+resultados %>%
+  group_by(BRASIL_VENCEU_SERBIA) %>%
+  summarise(BRASIL_SELECIONADO = mean(BRASIL_SELECIONADO))
+resultados %>%
+  group_by(BRASIL_VENCEU_SWITZERLAND) %>%
+  summarise(BRASIL_SELECIONADO = mean(BRASIL_SELECIONADO))
+```
+
+```{r}
+p_load(microbenchmark)
+microbenchmark({ simular_fase_grupos(fase_grupos) }, times=25)
+```
+
+Em média, levou-se aproximadamente 0,3 segundos para simular um único torneio da fase de grupos e obter os países selecionados. Mesmo com o cluster disponibilizado pelo Google Cloud, não há a menor chance de repetir essa operação por 100 milhões de vezes. E sequer ainda estamos considerando a simulação das fases seguintes da Copa.
+
+Tentamos pensar em outras estruturas de dados mais adequadas e eficientes para esse tipo de simulação, mas não descobrimos uma opção que permitisse realizar as operações que precisávamos.
+
+Na hora de realizar a simulação utilizando o Google Cloud,
+
+Como também não conseguimos prosseguir com a simulação das demais etapas da Copa, decidimos utilizar o Google Cloud para executar as operações em paralelo desta etapa.
 
 **c)** Qual é a probabilidade do Brasil ser campeão, em uma final contra a Argentina, tendo se classificado em primeiro do grupo? Para responder ao item, gere 100 milhões de amostras de Monte Carlo usando um cluster na nuvem!
 
 **Atenção**: Nas fases eliminatórias, em caso de empate, sorteie o classificado considerando probabilidade de 50% para cada time (como dizem - equivocadamente -, *penalty* é loteria).
-
-**Solução:**
-
-abc
 
 ## Considerações finais
 

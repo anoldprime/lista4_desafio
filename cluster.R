@@ -69,7 +69,7 @@ gce_list_instances()
 vms <- gce_vm_cluster(vm_prefix = "r-cluster-",
                       cluster_size = 3,
                       docker_image = "rocker/r-parallel",
-                      predefined_type = "e2-standard-2",
+                      predefined_type = "e2-standard-4",
                       scheduling = list(preemptible = TRUE), 
                       ssh_args = list(key.pub = str_c(ssh_key_info()$key, ".pub"),
                                       key.private = ssh_key_info()$key))
