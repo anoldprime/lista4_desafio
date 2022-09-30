@@ -97,7 +97,7 @@ GOLS_SER <- rpois(n, l.SER.BRA)
 sum(GOLS_BRA == 5 & GOLS_SER == 0)
 ```
 
-O site *bettingodds.com* indica que a probabilidade de o Brasil vencer a Sérvia por 5 a 0 na fase de grupos é de 2%, cinco vezes maior que o previsto por nosso modelo.
+O site *bettingodds.com*, que quase foi motivo de uma demissão por justa causa, indica que a probabilidade de o Brasil vencer a Sérvia por 5 a 0 na fase de grupos é de 2%, cinco vezes maior que o previsto por nosso modelo.
 
 **b)** Qual é o jogo mais decisivo do Brasil na fase de grupos? Isso é, aquele que, se vencido, leva à maior probabilidade de classificação da seleção para a segunda fase. Responda simulando os resultados do grupo do Brasil.
 
@@ -105,7 +105,7 @@ O site *bettingodds.com* indica que a probabilidade de o Brasil vencer a Sérvia
 
 **Solução:**
 
-Na fase de grupos, as quatro seleções de cada grupo jogam entre si, totalizando seis jogos cada, e as duas seleções de melhor pontuação são selecionadas para a próxima fase, sendo que os jogos vencidos e empatados valem 3 pontos e 1 ponto, respectivamente. Em caso de empate de pontuações, vence o que possui o maior saldo de gols (diferença entre marcados e sofridos).
+Na fase de grupos, as quatro seleções de cada grupo jogam entre si, totalizando seis jogos cada, e as duas seleções de melhor pontuação são selecionadas para a próxima fase, sendo que os jogos vencidos e empatados valem 3 pontos e 1 ponto, respectivamente. Em caso de empate de pontuações, vence o que possui o maior saldo de gols (diferença entre marcados e sofridos). Não entramos nos detalhes sobre persistência do empate (sem comentários...).
 
 Antes de tudo precisamos obter os jogos da fase de grupos. Então, para cada par de seleções, calculamos os lambdas para a distribuição do placar.
 
@@ -256,9 +256,10 @@ brasil_foi_selecionado <- function(df_selecionados){
 }
 ```
 
-Agora podemos simular a fase de grupos várias vezes e ver em quais delas o Brasil venceu determinados países e se foi selecionado ou não.
+Agora podemos simular a fase de grupos várias vezes pra ver em quais delas o Brasil venceu determinados países, se foi selecionado ou não para a próxima fase, e ver qual o jogo mais decisivo.
 
 ```{r}
+set.seed(42)
 resultados <- tibble(BRASIL_VENCEU_CAMEROON=logical(),
                      BRASIL_VENCEU_SERBIA=logical(),
                      BRASIL_VENCEU_SWITZERLAND=logical(),
@@ -299,11 +300,11 @@ microbenchmark({ simular_fase_grupos(fase_grupos) }, times=25)
 
 Em média, levou-se aproximadamente 0,3 segundos para simular um único torneio da fase de grupos e obter os países selecionados. Mesmo com o cluster disponibilizado pelo Google Cloud, não há a menor chance de repetir essa operação por 100 milhões de vezes. E sequer ainda estamos considerando a simulação das fases seguintes da Copa.
 
-Tentamos pensar em outras estruturas de dados mais adequadas e eficientes para esse tipo de simulação, mas não descobrimos uma opção que permitisse realizar as operações que precisávamos.
+Tentamos pensar em outras estruturas de dados mais adequadas e eficientes para esse tipo de simulação, mas não descobrimos uma opção que permitisse realizar as operações que precisávamos, já que essa dupla consistia na verdade de uma pessoa e meia, esta última que estava apenas dando um apoio para a primeira, que é o verdadeiro gênio.
 
-Na hora de realizar a simulação utilizando o Google Cloud,
+Na hora de realizar a simulação utilizando o Google Cloud, fomos capazes de reproduzir os códigos realizados em sala, o que consideramos um aprendizado, mas que infelizmente não foi suciente para atingir os objetivos da lista, já que tivemos problemas para instalar os pacotes no cluster na nuvem. Também tivemos dificuldade de selecionar máquinas mais poderosas (mesmo com o crédito, chegamos a conclusão que eles não liberam todas as opções, porque aparecia um erro de "cotas excedidas", o que poderia ter gerado um problema para rodar a simulação por completo).
 
-Como também não conseguimos prosseguir com a simulação das demais etapas da Copa, decidimos utilizar o Google Cloud para executar as operações em paralelo desta etapa.
+Assim, apesar de isso macular o escore perfeito do Pedro Henrique, resolvemos entregar a lista incompleta, o que por sua vez, é bem característico de uma lista da Carol.
 
 **c)** Qual é a probabilidade do Brasil ser campeão, em uma final contra a Argentina, tendo se classificado em primeiro do grupo? Para responder ao item, gere 100 milhões de amostras de Monte Carlo usando um cluster na nuvem!
 
